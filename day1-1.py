@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-db = ['Linux', 'Windows', 'MacOS', 'ubuntu', 'redhat']
+db = ['Linux', 'Windows', 'MacOS', 'ubuntu', 'redhat', 'test']
 
 @dataclass
 class User:
