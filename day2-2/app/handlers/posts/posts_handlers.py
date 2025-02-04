@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 import time
 
-from app.models.post_models import *
+from app.models.post import *
 from app.models.shared import *
 
 router = APIRouter(
@@ -36,7 +36,7 @@ def get_post(post_id: int) -> PostsResp:
         ]
     )
 
-@router.post("/")
+@router.post("/", status_code=201)
 def create_post(params: CreatePostReq) -> PostsResp:
     nCurTimestamp = int(time.time())
     return PostsResp(
