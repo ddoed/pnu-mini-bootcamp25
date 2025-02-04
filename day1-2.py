@@ -119,12 +119,12 @@ def createServer():
         serverSocket.bind(('localhost', 8080)); #포트번호 설정
         serverSocket.listen();  #서버가 클라이언트의 요청을 받을 준비
         while True:
-            (cSocket, addr) = serverSocket.accept()
+            (cSocket, addr) = serverSocket.accept() #클라이언트의 요청이 오면 연결을 수락
             print(addr)
 
             req = cSocket.recv(1024).decode('utf-8')
             print(req)
-            httpReq = parseRequest(req)
+            httpReq = parseRequest(req) 
 
             bRes = handle_req(httpReq)
             cSocket.sendall(bRes)
@@ -135,4 +135,16 @@ def createServer():
         serverSocket.close()
 
 if __name__ == '__main__':
-    createServer()
+    # createServer()
+    resp = makeResponseHeader(HttpStatusCode.OK, HttpContentType.TEXT_HTML)
+    print(resp)
+
+    print('=' * 20)
+
+    ext = {
+        'Location': 'https://www.google.com'
+    }
+    resp = makeResponseHeader(HttpStatusCode.MOVED,
+                            HttpContentType.TEXT_HTML,
+                            ext)
+    print(resp)
