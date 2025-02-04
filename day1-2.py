@@ -20,6 +20,7 @@ class HttpMethod(Enum):
 class HttpRequest:
     method: HttpMethod
     url: str
+    userAgent: str
 
 db = [
     {'id':1, 'name':"Trump"},
@@ -34,6 +35,7 @@ class HttpStatusCode(Enum):
     NOT_FOUND = (404, 'Not Found')
     SEE_OTHER = (303, 'See Other')
     SERVER_ERROR = (500, 'Internal Server Error')
+    METHOD_NOT_ALLOWED = (405, 'Method Not Allowed')
 
 def makeResponseHeader(status:HttpStatusCode,
                         contentType:HttpContentType,
@@ -49,69 +51,85 @@ def makeResponseHeader(status:HttpStatusCode,
 def parseRequest(requests:str) -> HttpRequest | None:
     if len(requests) < 1:
         return None
+
     arRequests = requests.split('\n')
     for line in arRequests:
         match = re.search(r'\b(GET|POST|DELETE|PUT|PATCH)\b\s+(.*?)\s+HTTP/1.1',line) # group(1) : Method, group(2) : Path
         if match:
-            method=HttpMethod(match.group(1))
-            url=match.group(2)
+            req = HttpRequest()
             try:
-                return HttpRequest(method, url)
-            except ValueError:
+                req.method = HttpMethod(match.group(1))
+                req.url = match.group(2)
+            except:
                 return None
+            
+            return req
     return None
 
 def get_user_from_db():
     return db
 
-def createServer():
+def handle_req(req: HttpRequest) -> bytes:
     arPath = ['/', '/users', '/google.png', '/google']
+    if req is None:
+        resp = makeResponseHeader(HttpStatusCode.METHOD_NOT_ALLOWED, 
+                                HttpContentType.TEXT_HTML)
+        return resp.encode('utf-8')
+
+    print(f'Path={req.url}')
+    strPath = req.url
+    # 고객께 답변 드리기
+    bResp = bytes()
+    if strPath not in arPath:
+        resp = makeResponseHeader(HttpStatusCode.NOT_FOUND, 
+                                HttpContentType.TEXT_HTML)
+        resp += '<html><body>없습니다</body></html>\n'
+        bResp = resp.encode('utf-8')
+
+    elif strPath == '/users':
+        resp = makeResponseHeader(HttpStatusCode.OK, 
+                                HttpContentType.APPLICATION_JSON)
+        resp += json.dumps(get_user_from_db())
+        bResp = resp.encode('utf-8')
+
+    elif strPath == '/google':
+        resp = makeResponseHeader(HttpStatusCode.MOVED_PERMANENTLY, 
+                                HttpContentType.TEXT_HTML, 
+                                {'Location': 'https://www.google.com'})
+        bResp = resp.encode('utf-8')
+        
+    elif strPath == '/google.png':
+        resp = makeResponseHeader(HttpStatusCode.OK,
+                                HttpContentType.IMAGE_PNG)
+        bResp = resp.encode('utf-8')
+
+        with open('google.png', 'rb') as f:
+            bResp += f.read()
+    else:
+        resp = makeResponseHeader(HttpStatusCode.OK, HttpContentType.TEXT_HTML)
+        resp += '<html><body>Hello <img src="/google.png" /></body></html>'
+        bResp = resp.encode('utf-8')
+        
+    return bResp
+
+def createServer():
+    
     serverSocket = socket(AF_INET, SOCK_STREAM)
     try:
         serverSocket.bind(('localhost', 8080)); #포트번호 설정
         serverSocket.listen();  #서버가 클라이언트의 요청을 받을 준비
         while True:
-            #클라이언트가 요청을 보내면 accept()로 연결을 수락
-            (connectionSocket, addr) = serverSocket.accept(); 
+            (cSocket, addr) = serverSocket.accept()
             print(addr)
-            #클라이언트가 보낸 메시지를 받기 위해 recv() 함수를 사용
-            req = connectionSocket.recv(1024).decode('utf-8');
-            httpreq = parseRequest(req)
-            strPath = httpreq.url;
-            if(httpreq is None or strPath is None):
-                connectionSocket.shutdown(SHUT_WR)
-                continue
-            #응답 헤더 작성
-            res = '';
-            #요청한 경로가 존재하지 않을 때
-            if strPath not in arPath:
-                res = makeResponseHeader(HttpStatusCode.NOT_FOUND, HttpContentType.TEXT_HTML)
-                res += '<html><body>404 Not Found</body></html>\n'
 
-            elif strPath == '/users':
-                users = get_user_from_db()
-                res = makeResponseHeader(HttpStatusCode.OK, HttpContentType.APPLICATION_JSON)
-                res += json.dumps(get_user_from_db())
+            req = cSocket.recv(1024).decode('utf-8')
+            print(req)
+            httpReq = parseRequest(req)
 
-            elif strPath == '/google.png':
-                res = makeResponseHeader(HttpStatusCode.OK, HttpContentType.IMAGE_PNG)
-                connectionSocket.sendall(res.encode('utf-8')) # 헤더 전송
-                with open('google.png', 'rb') as f:
-                    while chunk := f.read(1024):
-                        connectionSocket.sendall(chunk)
-                connectionSocket.shutdown(SHUT_WR)
-                continue
+            bRes = handle_req(httpReq)
+            cSocket.sendall(bRes)
 
-            elif strPath == '/google':
-                res = makeResponseHeader(HttpStatusCode.SEE_OTHER, HttpContentType.TEXT_HTML, {'Location':'https://www.google.com'})
-
-            elif strPath == '/':
-                res = makeResponseHeader(HttpStatusCode.OK, HttpContentType.TEXT_HTML)
-                res += '<html><body>Hello World<br><img src="/google.png"/></body></html>\n'
-            
-            #클라이언트에 응답 보내기
-            connectionSocket.sendall(res.encode('utf-8'))
-            connectionSocket.shutdown(SHUT_WR)
+            cSocket.shutdown(SHUT_WR)
 
     except KeyboardInterrupt:
         serverSocket.close()
